@@ -64,30 +64,23 @@ export default function Categories() {
         </div>
       </div>
 
-      <div className="table-container">
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr><th>ID</th><th>Tên thể loại</th><th>Thao tác</th></tr>
-            </thead>
-            <tbody>
-              {categories.length === 0 ? (
-                <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Không có dữ liệu</td></tr>
-              ) : categories.map((cat) => (
-                <tr key={cat.id}>
-                  <td>{cat.id}</td>
-                  <td>{cat.name}</td>
-                  <td className="actions">
-                    <button className="btn btn-sm btn-danger" onClick={() => openDeleteModal(cat)}>🗑️</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {categories.length === 0 ? (
+        <div className="cat-empty">
+          <div className="cat-empty-icon">🏷️</div>
+          <p>Chưa có thể loại nào</p>
         </div>
-      </div>
+      ) : (
+        <div className="cat-grid">
+          {categories.map((cat, i) => (
+            <div className="cat-card" key={cat.id}>
+              <span className="cat-index">#{String(i + 1).padStart(2, '0')}</span>
+              <span className="cat-name">{cat.name}</span>
+              <button className="cat-delete" title="Xóa thể loại" onClick={() => openDeleteModal(cat)}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Add Modal */}
       <Modal
         active={addModal}
         onClose={() => setAddModal(false)}
@@ -95,7 +88,7 @@ export default function Categories() {
         size="xs"
         footer={
           <>
-            <button className="btn btn-ghost" onClick={() => setAddModal(false)}>Hủy</button>
+            <button className="btn btn-outline" onClick={() => setAddModal(false)}>Hủy</button>
             <button className="btn btn-primary" form="catForm" type="submit">Lưu</button>
           </>
         }
@@ -103,12 +96,18 @@ export default function Categories() {
         <form id="catForm" onSubmit={saveCategory}>
           <div className="form-group">
             <label className="form-label">Tên thể loại <span className="required">*</span></label>
-            <input className="form-control" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nhập tên thể loại" />
+            <input
+              className="form-control"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="VD: Văn học, Khoa học..."
+              autoFocus
+            />
           </div>
         </form>
       </Modal>
 
-      {/* Delete Modal */}
       <Modal
         active={deleteModal}
         onClose={() => setDeleteModal(false)}
@@ -116,12 +115,13 @@ export default function Categories() {
         size="xs"
         footer={
           <>
-            <button className="btn btn-ghost" onClick={() => setDeleteModal(false)}>Hủy</button>
+            <button className="btn btn-outline" onClick={() => setDeleteModal(false)}>Hủy</button>
             <button className="btn btn-danger" onClick={confirmDelete}>Xóa</button>
           </>
         }
       >
         <p>Bạn có chắc muốn xóa thể loại <strong>{deletingName}</strong>?</p>
+        <p className="text-danger" style={{ fontSize: '.875rem' }}>Sách thuộc thể loại này sẽ không còn được phân loại.</p>
       </Modal>
     </>
   );

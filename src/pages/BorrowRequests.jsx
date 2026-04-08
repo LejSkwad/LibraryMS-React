@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE, PAGE_SIZE, apiFetch, formatDate } from '../api/api';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
+import { usePagination } from '../hooks/usePagination';
 
 const today = new Date().toISOString().split('T')[0];
 const defaultDue = (() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().split('T')[0]; })();
@@ -10,27 +12,94 @@ export default function BorrowRequests() {
   const { user } = useAuth();
   const isBorrower = user?.role === 'BORROWER';
 
-  const [requests, setRequests] = useState([]);
-  const [page, setPage] = useState(null);
-  const [currentPage, setCurrentPage] = useState(0);
+  const { items: requests, page, currentPage, setCurrentPage, setPageResult, tableInfo } = usePagination();
   const [status, setStatus] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   const [approveModal, setApproveModal] = useState(false);
   const [borrowDate, setBorrowDate] = useState(today);
   const [dueDate, setDueDate] = useState(defaultDue);
-
   const [rejectModal, setRejectModal] = useState(false);
-
   const [cancelModal, setCancelModal] = useState(false);
 
-  function filterStatus(st) {
-    setStatus(st); setCurrentPage(0);
+  async function loadRequests(pg = currentPage, st = status) {
+    const params = new URLSearchParams({ page: pg, size: PAGE_SIZE });
+    if (st) params.append('status', st);
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests?${params}`);
+      const json = await res.json();
+      setPageResult(json.data);
+    } catch {}
   }
 
-  function goToPage(p) { setCurrentPage(p); }
+  useEffect(() => { loadRequests(0); }, []);
 
-  function openApprove() {
-    setBorrowDate(today); setDueDate(defaultDue); setApproveModal(true);
+  // Ref so SSE handler always calls latest loadRequests
+  const loadRef = useRef(null);
+  loadRef.current = () => loadRequests(0, status);
+
+  useEffect(() => {
+    function handler(e) {
+      const { type } = e.detail || {};
+      const shouldRefresh =
+        (!isBorrower && type === 'new_request') ||
+        (isBorrower && (type === 'request_approved' || type === 'request_rejected'));
+      if (shouldRefresh) loadRef.current();
+    }
+    window.addEventListener('borrow-request-sse', handler);
+    return () => window.removeEventListener('borrow-request-sse', handler);
+  }, [isBorrower]);
+
+  function filterStatus(st) {
+    setStatus(st);
+    setCurrentPage(0);
+    loadRequests(0, st);
+  }
+
+  function goToPage(p) {
+    setCurrentPage(p);
+    loadRequests(p);
+  }
+
+  function openApprove(r) {
+    setSelectedRequest(r);
+    setBorrowDate(today);
+    setDueDate(defaultDue);
+    setApproveModal(true);
+  }
+
+  async function handleApprove() {
+    if (!selectedRequest) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ borrowDate: formatDate(borrowDate), dueDate: formatDate(dueDate) }),
+      });
+      const json = await res.json();
+      alert(json.message);
+      if (res.ok) { setApproveModal(false); loadRequests(0, status); }
+    } catch { alert('Lỗi kết nối!'); }
+  }
+
+  async function handleReject() {
+    if (!selectedRequest) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}/reject`, { method: 'PUT' });
+      const json = await res.json();
+      alert(json.message);
+      if (res.ok) { setRejectModal(false); loadRequests(0, status); }
+    } catch { alert('Lỗi kết nối!'); }
+  }
+
+  async function handleCancel() {
+    if (!selectedRequest) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      alert(json.message);
+      if (res.ok) { setCancelModal(false); loadRequests(0, status); }
+    } catch { alert('Lỗi kết nối!'); }
   }
 
   function statusBadge(st) {
@@ -40,13 +109,8 @@ export default function BorrowRequests() {
     return { cls: 'badge-secondary', text: st };
   }
 
-  const tableInfo = page
-    ? `Hiển thị ${page.totalElements === 0 ? 0 : page.number * page.size + 1}-${Math.min(page.number * page.size + page.size, page.totalElements)} của ${page.totalElements} kết quả`
-    : '';
-
   return (
     <>
-
       <div className="tabs">
         {['', 'PENDING', 'APPROVED', 'REJECTED'].map((st) => (
           <button
@@ -85,11 +149,11 @@ export default function BorrowRequests() {
                     <td className="actions">
                       {r.status === 'PENDING' ? (
                         isBorrower ? (
-                          <button className="btn btn-sm btn-danger" onClick={() => setCancelModal(true)}>🗑️ Hủy</button>
+                          <button className="btn btn-sm btn-danger" onClick={() => { setSelectedRequest(r); setCancelModal(true); }}>🗑️ Hủy</button>
                         ) : (
                           <>
-                            <button className="btn btn-sm btn-success" onClick={() => openApprove()}>✅ Duyệt</button>
-                            <button className="btn btn-sm btn-danger" onClick={() => setRejectModal(true)}>❌ Từ chối</button>
+                            <button className="btn btn-sm btn-success" onClick={() => openApprove(r)}>✅ Duyệt</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => { setSelectedRequest(r); setRejectModal(true); }}>❌ Từ chối</button>
                           </>
                         )
                       ) : '-'}
@@ -115,7 +179,7 @@ export default function BorrowRequests() {
         footer={
           <>
             <button className="btn btn-outline" onClick={() => setApproveModal(false)}>Hủy</button>
-            <button className="btn btn-success" onClick={() => setApproveModal(false)}>✅ Xác nhận duyệt</button>
+            <button className="btn btn-success" onClick={handleApprove}>✅ Xác nhận duyệt</button>
           </>
         }
       >
@@ -141,7 +205,7 @@ export default function BorrowRequests() {
         footer={
           <>
             <button className="btn btn-outline" onClick={() => setRejectModal(false)}>Hủy</button>
-            <button className="btn btn-danger" onClick={() => setRejectModal(false)}>❌ Xác nhận từ chối</button>
+            <button className="btn btn-danger" onClick={handleReject}>❌ Xác nhận từ chối</button>
           </>
         }
       >
@@ -157,7 +221,7 @@ export default function BorrowRequests() {
         footer={
           <>
             <button className="btn btn-outline" onClick={() => setCancelModal(false)}>Không</button>
-            <button className="btn btn-danger" onClick={() => setCancelModal(false)}>🗑️ Hủy yêu cầu</button>
+            <button className="btn btn-danger" onClick={handleCancel}>🗑️ Hủy yêu cầu</button>
           </>
         }
       >

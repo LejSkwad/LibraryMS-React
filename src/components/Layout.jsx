@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../api/api';
 
 const PAGE_TITLES = {
   '/dashboard': 'Dashboard',
@@ -21,6 +23,42 @@ export default function Layout() {
   const isBorrower = user?.role === 'BORROWER';
   const avatarLetter = (user?.firstName || 'U')[0].toUpperCase();
   const fullName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'User';
+
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Connect SSE once on mount
+  useEffect(() => {
+    if (!user?.token) return;
+    const es = new EventSource(`${API_BASE}/events?token=${encodeURIComponent(user.token)}`);
+
+    es.addEventListener('new_request', (e) => {
+      if (!isBorrower) setPendingCount((c) => c + 1);
+      try {
+        window.dispatchEvent(new CustomEvent('borrow-request-sse', { detail: { type: 'new_request', data: JSON.parse(e.data) } }));
+      } catch {}
+    });
+
+    es.addEventListener('request_approved', (e) => {
+      try {
+        window.dispatchEvent(new CustomEvent('borrow-request-sse', { detail: { type: 'request_approved', data: JSON.parse(e.data) } }));
+      } catch {}
+    });
+
+    es.addEventListener('request_rejected', (e) => {
+      try {
+        window.dispatchEvent(new CustomEvent('borrow-request-sse', { detail: { type: 'request_rejected', data: JSON.parse(e.data) } }));
+      } catch {}
+    });
+
+    es.onerror = () => es.close();
+
+    return () => es.close();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset badge when user navigates to borrow-requests page
+  useEffect(() => {
+    if (location.pathname === '/borrow-requests') setPendingCount(0);
+  }, [location.pathname]);
 
   function navCls({ isActive }) {
     return 'nav-item' + (isActive ? ' active' : '');
@@ -70,6 +108,9 @@ export default function Layout() {
             <NavLink to="/borrow-requests" className={navCls}>
               <span className="icon">📋</span>
               <span>Yêu cầu mượn</span>
+              {!isBorrower && pendingCount > 0 && (
+                <span className="nav-badge">{pendingCount > 99 ? '99+' : pendingCount}</span>
+              )}
             </NavLink>
           </div>
 
