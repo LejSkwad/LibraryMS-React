@@ -5,9 +5,9 @@ import StatCard from '../components/StatCard';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
-    totalBooks: '...', availableBooks: '...',
+    totalBooks: '...',
     borrowedBooks: '...', overdueBooks: '...',
-    totalBorrowers: '...', totalTransactions: '...',
+    totalBorrowers: '...', totalTransactions: '...', pendingRequests: '...',
   });
   const [recentTxns, setRecentTxns] = useState([]);
   const [overdueTxns, setOverdueTxns] = useState([]);
@@ -23,6 +23,7 @@ export default function Dashboard() {
       loadCount('OVERDUE', 'overdueBooks'),
       loadBorrowersCount(),
       loadTxnCount(),
+      loadPendingRequests(),
       loadRecentTxns(),
       loadOverdueTxns(),
     ]);
@@ -30,16 +31,11 @@ export default function Dashboard() {
 
   async function loadBookStats() {
     try {
-      const res = await apiFetch(`${API_BASE}/v1/books?page=0&size=1000`);
+      const res = await apiFetch(`${API_BASE}/v1/books?page=0&size=1`);
       const json = await res.json();
-      const books = json.data?.content || [];
-      setStats((s) => ({
-        ...s,
-        totalBooks: books.reduce((a, b) => a + (b.quantity || 0), 0).toLocaleString(),
-        availableBooks: books.reduce((a, b) => a + (b.availableQuantity || 0), 0).toLocaleString(),
-      }));
+      setStats((s) => ({ ...s, totalBooks: (json.data?.totalElements ?? '-').toLocaleString() }));
     } catch {
-      setStats((s) => ({ ...s, totalBooks: '-', availableBooks: '-' }));
+      setStats((s) => ({ ...s, totalBooks: '-' }));
     }
   }
 
@@ -73,6 +69,16 @@ export default function Dashboard() {
     }
   }
 
+  async function loadPendingRequests() {
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests?status=PENDING&page=0&size=1`);
+      const json = await res.json();
+      setStats((s) => ({ ...s, pendingRequests: (json.data?.totalElements ?? '-').toLocaleString() }));
+    } catch {
+      setStats((s) => ({ ...s, pendingRequests: '-' }));
+    }
+  }
+
   async function loadRecentTxns() {
     try {
       const res = await apiFetch(`${API_BASE}/v1/transactions?page=0&size=5&sort=id,desc`);
@@ -98,15 +104,15 @@ export default function Dashboard() {
       {/* Row 1: 4 stat cards */}
       <div className="stat-cards">
         <StatCard icon="📚" color="primary" value={stats.totalBooks} label="Tổng số sách" />
-        <StatCard icon="✅" color="success" value={stats.availableBooks} label="Sách có sẵn" />
         <StatCard icon="📤" color="warning" value={stats.borrowedBooks} label="Đang cho mượn" />
         <StatCard icon="⚠️" color="danger" value={stats.overdueBooks} label="Quá hạn" />
       </div>
 
-      {/* Row 2: 2 stat cards */}
+      {/* Row 2: 3 stat cards */}
       <div className="stat-cards">
         <StatCard icon="👥" color="primary" value={stats.totalBorrowers} label="Người mượn" />
         <StatCard icon="📋" color="success" value={stats.totalTransactions} label="Tổng giao dịch" />
+        <StatCard icon="⏳" color="warning" value={stats.pendingRequests} label="Yêu cầu chờ duyệt" />
       </div>
 
       {/* Recent Transactions */}
@@ -119,7 +125,7 @@ export default function Dashboard() {
           <table className="table">
             <thead>
               <tr>
-                <th>Mã GD</th><th>Người mượn</th><th>CCCD</th>
+                <th>Mã GD</th><th>Người mượn</th><th>Mã thẻ</th>
                 <th>Ngày mượn</th><th>Hạn trả</th><th>Ngày trả</th><th>Trạng thái</th>
               </tr>
             </thead>
@@ -131,8 +137,8 @@ export default function Dashboard() {
                 return (
                   <tr key={t.id}>
                     <td><strong>#{t.id}</strong></td>
-                    <td>{t.userName}</td>
-                    <td>{t.socialNumber}</td>
+                    <td>{t.fullName}</td>
+                    <td>{t.memberId}</td>
                     <td>{t.borrowDate}</td>
                     <td>{t.dueDate}</td>
                     <td>{t.returnDate || '-'}</td>
@@ -154,7 +160,7 @@ export default function Dashboard() {
           <table className="table">
             <thead>
               <tr>
-                <th>Mã GD</th><th>Người mượn</th><th>CCCD</th><th>Hạn trả</th><th>Quá hạn</th>
+                <th>Mã GD</th><th>Người mượn</th><th>Mã thẻ</th><th>Hạn trả</th><th>Quá hạn</th>
               </tr>
             </thead>
             <tbody>
@@ -167,8 +173,8 @@ export default function Dashboard() {
                 return (
                   <tr key={t.id}>
                     <td><strong>#{t.id}</strong></td>
-                    <td>{t.userName}</td>
-                    <td>{t.socialNumber}</td>
+                    <td>{t.fullName}</td>
+                    <td>{t.memberId}</td>
                     <td>{t.dueDate}</td>
                     <td><span className="text-danger">{days} ngày</span></td>
                   </tr>

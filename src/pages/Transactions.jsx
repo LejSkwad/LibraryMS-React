@@ -21,16 +21,16 @@ export default function Transactions() {
   const [detailBooks, setDetailBooks] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const [checkoutModal, setCheckoutModal] = useState(false);
-  const [checkoutBorrower, setCheckoutBorrower] = useState(null);
-  const [checkoutBooks, setCheckoutBooks] = useState([]);
+  // Checkin = lend books to borrower (create transaction)
+  const [checkinModal, setCheckinModal] = useState(false);
+  const [checkinBorrower, setCheckinBorrower] = useState(null);
+  const [checkinBooks, setCheckinBooks] = useState([]);
   const [borrowerQuery, setBorrowerQuery] = useState('');
   const [borrowerResults, setBorrowerResults] = useState([]);
   const [borrowerDropOpen, setBorrowerDropOpen] = useState(false);
   const [bookQuery, setBookQuery] = useState('');
   const [bookResults, setBookResults] = useState([]);
   const [bookDropOpen, setBookDropOpen] = useState(false);
-  const [checkoutDate, setCheckoutDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const debouncedBorrowerSearch = useDebounce(async (v) => {
     if (!v) { setBorrowerDropOpen(false); return; }
@@ -51,8 +51,9 @@ export default function Transactions() {
     } catch {}
   });
 
-  const [checkinModal, setCheckinModal] = useState(false);
-  const [checkinTxn, setCheckinTxn] = useState(null);
+  // Checkout = borrower returns books
+  const [checkoutModal, setCheckoutModal] = useState(false);
+  const [checkoutTxn, setCheckoutTxn] = useState(null);
 
   const [editModal, setEditModal] = useState(false);
   const [editTxnId, setEditTxnId] = useState(null);
@@ -66,8 +67,9 @@ export default function Transactions() {
   async function load(pg = currentPage, st = statusFilter, s = search) {
     const params = new URLSearchParams({ page: pg, size: PAGE_SIZE });
     if (st) params.append('status', st);
-    if (isBorrower) { params.append('memberId', user.memberId || ''); }
-    else {
+    if (isBorrower) {
+      params.append('userId', user.id);
+    } else {
       if (s.keyword) params.append('keyword', s.keyword);
       if (s.memberId) params.append('memberId', s.memberId);
     }
@@ -108,50 +110,49 @@ export default function Transactions() {
     setDetailLoading(false);
   }
 
-  function openCheckout() {
-    setCheckoutBorrower(null); setCheckoutBooks([]);
+  function openCheckin() {
+    setCheckinBorrower(null); setCheckinBooks([]);
     setBorrowerQuery(''); setBorrowerResults([]); setBorrowerDropOpen(false);
     setBookQuery(''); setBookResults([]); setBookDropOpen(false);
-    const t = new Date(); const d = new Date(); d.setDate(t.getDate() + 14);
-    setCheckoutDate(t.toISOString().split('T')[0]);
+    const d = new Date(); d.setDate(d.getDate() + 14);
     setDueDate(d.toISOString().split('T')[0]);
-    setCheckoutModal(true);
+    setCheckinModal(true);
   }
 
   function onBorrowerSearch(v) { setBorrowerQuery(v); debouncedBorrowerSearch(v); }
   function onBookSearch(v) { setBookQuery(v); debouncedBookSearch(v); }
-  function selectBorrower(u) { setCheckoutBorrower(u); setBorrowerQuery(''); setBorrowerDropOpen(false); }
-  function addCheckoutBook(b) {
-    if (!checkoutBooks.some((x) => x.id === b.id)) setCheckoutBooks((prev) => [...prev, b]);
+  function selectBorrower(u) { setCheckinBorrower(u); setBorrowerQuery(''); setBorrowerDropOpen(false); }
+  function addCheckinBook(b) {
+    if (!checkinBooks.some((x) => x.id === b.id)) setCheckinBooks((prev) => [...prev, b]);
     setBookQuery(''); setBookDropOpen(false);
   }
-  function removeCheckoutBook(id) { setCheckoutBooks((prev) => prev.filter((b) => b.id !== id)); }
+  function removeCheckinBook(id) { setCheckinBooks((prev) => prev.filter((b) => b.id !== id)); }
 
-  async function processCheckout() {
-    if (!checkoutBorrower) { alert('Vui lòng chọn người mượn!'); return; }
-    if (checkoutBooks.length === 0) { alert('Vui lòng thêm ít nhất 1 cuốn sách!'); return; }
-    if (!checkoutDate || !dueDate) { alert('Vui lòng nhập ngày mượn và hạn trả!'); return; }
+  async function processCheckin() {
+    if (!checkinBorrower) { alert('Vui lòng chọn người mượn!'); return; }
+    if (checkinBooks.length === 0) { alert('Vui lòng thêm ít nhất 1 cuốn sách!'); return; }
+    if (!dueDate) { alert('Vui lòng nhập hạn trả!'); return; }
     try {
       const res = await apiFetch(`${API_BASE}/v1/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: checkoutBorrower.id, bookIds: checkoutBooks.map((b) => b.id), borrowDate: formatDate(checkoutDate), dueDate: formatDate(dueDate) }),
+        body: JSON.stringify({ userId: checkinBorrower.id, bookIds: checkinBooks.map((b) => b.id), dueDate: formatDate(dueDate) }),
       });
       const json = await res.json();
       alert(json.message);
       if (!res.ok) return;
-      setCheckoutModal(false);
+      setCheckinModal(false);
       load();
     } catch { alert('Không thể kết nối đến server!'); }
   }
 
-  async function confirmCheckin() {
+  async function confirmCheckout() {
     try {
-      const res = await apiFetch(`${API_BASE}/v1/transactions/return-books/${checkinTxn.id}`, { method: 'PUT' });
+      const res = await apiFetch(`${API_BASE}/v1/transactions/return-books/${checkoutTxn.id}`, { method: 'PUT' });
       const json = await res.json();
       alert(json.message);
       if (!res.ok) return;
-      setCheckinModal(false);
+      setCheckoutModal(false);
       load();
     } catch { alert('Không thể kết nối đến server!'); }
   }
@@ -189,8 +190,8 @@ export default function Transactions() {
   }
 
   const today = new Date();
-  const checkinDiff = checkinTxn
-    ? Math.ceil((today - new Date(checkinTxn.dueDate)) / (1000 * 60 * 60 * 24))
+  const checkoutDiff = checkoutTxn
+    ? Math.ceil((today - new Date(checkoutTxn.dueDate)) / (1000 * 60 * 60 * 24))
     : 0;
 
   return (
@@ -198,7 +199,7 @@ export default function Transactions() {
       <div className="page-header">
         {!isBorrower && (
           <div className="page-actions">
-            <button className="btn btn-primary" onClick={openCheckout}>+ Cho mượn sách</button>
+            <button className="btn btn-primary" onClick={openCheckin}>+ Cho mượn sách</button>
           </div>
         )}
       </div>
@@ -269,7 +270,7 @@ export default function Transactions() {
                 return (
                   <tr key={t.id}>
                     <td><strong>#{t.id}</strong></td>
-                    {!isBorrower && <><td>{t.userName}</td><td><code style={{ fontSize: '.8125rem' }}>{t.memberId}</code></td></>}
+                    {!isBorrower && <><td>{t.fullName}</td><td><code style={{ fontSize: '.8125rem' }}>{t.memberId}</code></td></>}
                     <td>{t.borrowDate}</td>
                     <td>{t.dueDate}</td>
                     <td>{t.returnDate || '—'}</td>
@@ -306,7 +307,7 @@ export default function Transactions() {
             <>
               <button className="btn btn-outline" onClick={() => setDetailModal(false)}>Đóng</button>
               {detailTxn.status !== 'RETURNED' && !isBorrower && (
-                <button className="btn btn-success" onClick={() => { setDetailModal(false); setCheckinTxn(detailTxn); setCheckinModal(true); }}>
+                <button className="btn btn-success" onClick={() => { setDetailModal(false); setCheckoutTxn(detailTxn); setCheckoutModal(true); }}>
                   Trả sách
                 </button>
               )}
@@ -317,7 +318,7 @@ export default function Transactions() {
             <div className="detail-row"><span className="text-muted">Mã giao dịch:</span><strong>#{detailTxn.id}</strong></div>
             {!isBorrower && (
               <>
-                <div className="detail-row"><span className="text-muted">Người mượn:</span><strong>{detailTxn.userName}</strong></div>
+                <div className="detail-row"><span className="text-muted">Người mượn:</span><strong>{detailTxn.fullName}</strong></div>
                 <div className="detail-row"><span className="text-muted">Mã thẻ:</span><span>{detailTxn.memberId}</span></div>
               </>
             )}
@@ -347,16 +348,16 @@ export default function Transactions() {
         </Modal>
       )}
 
-      {/* Checkout Modal */}
+      {/* Checkin Modal — lend books to borrower */}
       <Modal
-        active={checkoutModal}
-        onClose={() => setCheckoutModal(false)}
+        active={checkinModal}
+        onClose={() => setCheckinModal(false)}
         title="Cho mượn sách"
         size="lg"
         footer={
           <>
-            <button className="btn btn-outline" onClick={() => setCheckoutModal(false)}>Hủy</button>
-            <button className="btn btn-primary" onClick={processCheckout}>Xác nhận cho mượn</button>
+            <button className="btn btn-outline" onClick={() => setCheckinModal(false)}>Hủy</button>
+            <button className="btn btn-primary" onClick={processCheckin}>Xác nhận cho mượn</button>
           </>
         }
       >
@@ -384,13 +385,13 @@ export default function Transactions() {
                 </div>
               )}
             </div>
-            {checkoutBorrower && (
+            {checkinBorrower && (
               <div className="selected-item">
                 <div>
-                  <div className="selected-item-name">{checkoutBorrower.fullName}</div>
-                  <div className="selected-item-sub">Mã thẻ: {checkoutBorrower.memberId}</div>
+                  <div className="selected-item-name">{checkinBorrower.fullName}</div>
+                  <div className="selected-item-sub">Mã thẻ: {checkinBorrower.memberId}</div>
                 </div>
-                <button className="selected-item-clear" onClick={() => setCheckoutBorrower(null)}>×</button>
+                <button className="selected-item-clear" onClick={() => setCheckinBorrower(null)}>×</button>
               </div>
             )}
           </div>
@@ -411,12 +412,12 @@ export default function Transactions() {
                     <div className="picker-option" style={{ color: 'var(--text-muted)' }}>Không tìm thấy</div>
                   ) : bookResults.map((b) => {
                     const unavail = b.availableQuantity <= 0;
-                    const added = checkoutBooks.some((x) => x.id === b.id);
+                    const added = checkinBooks.some((x) => x.id === b.id);
                     return (
                       <div
                         key={b.id}
                         className={`picker-option${unavail || added ? ' disabled' : ''}`}
-                        onClick={() => !unavail && !added && addCheckoutBook(b)}
+                        onClick={() => !unavail && !added && addCheckinBook(b)}
                       >
                         <div>{b.title}</div>
                         <div className="picker-option-sub">{b.author} · {unavail ? 'Hết sách' : added ? 'Đã thêm' : `Còn: ${b.availableQuantity}`}</div>
@@ -426,15 +427,15 @@ export default function Transactions() {
                 </div>
               )}
             </div>
-            {checkoutBooks.length > 0 && (
+            {checkinBooks.length > 0 && (
               <div>
                 <table className="table">
                   <thead><tr><th>Tên sách</th><th>Tác giả</th><th>Còn lại</th><th></th></tr></thead>
                   <tbody>
-                    {checkoutBooks.map((b) => (
+                    {checkinBooks.map((b) => (
                       <tr key={b.id}>
                         <td>{b.title}</td><td>{b.author}</td><td>{b.availableQuantity}</td>
-                        <td><button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)' }} onClick={() => removeCheckoutBook(b.id)}>×</button></td>
+                        <td><button className="btn btn-sm btn-outline" style={{ color: 'var(--danger)' }} onClick={() => removeCheckinBook(b.id)}>×</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -445,46 +446,40 @@ export default function Transactions() {
 
           <div className="checkout-section">
             <div className="checkout-section-title">3. Thời gian</div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Ngày mượn <span className="required">*</span></label>
-                <input className="form-control" type="date" value={checkoutDate} onChange={(e) => setCheckoutDate(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Hạn trả <span className="required">*</span></label>
-                <input className="form-control" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                <span className="form-text">Mặc định: 14 ngày</span>
-              </div>
+            <div className="form-group">
+              <label className="form-label">Hạn trả <span className="required">*</span></label>
+              <input className="form-control" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <span className="form-text">Ngày mượn sẽ được tự động ghi nhận là hôm nay</span>
             </div>
           </div>
         </div>
       </Modal>
 
-      {/* Checkin Modal */}
-      {checkinTxn && (
+      {/* Checkout Modal — borrower returns books */}
+      {checkoutTxn && (
         <Modal
-          active={checkinModal}
-          onClose={() => setCheckinModal(false)}
+          active={checkoutModal}
+          onClose={() => setCheckoutModal(false)}
           title="Xác nhận trả sách"
           size="sm"
           footer={
             <>
-              <button className="btn btn-outline" onClick={() => setCheckinModal(false)}>Hủy</button>
-              <button className="btn btn-success" onClick={confirmCheckin}>Xác nhận trả sách</button>
+              <button className="btn btn-outline" onClick={() => setCheckoutModal(false)}>Hủy</button>
+              <button className="btn btn-success" onClick={confirmCheckout}>Xác nhận trả sách</button>
             </>
           }
         >
           <div className="checkin-info">
-            <div className="detail-row"><span className="text-muted">Mã giao dịch:</span><strong>#{checkinTxn.id}</strong></div>
-            <div className="detail-row"><span className="text-muted">Người mượn:</span><strong>{checkinTxn.userName}</strong></div>
-            <div className="detail-row"><span className="text-muted">Ngày mượn:</span><span>{checkinTxn.borrowDate}</span></div>
-            <div className="detail-row"><span className="text-muted">Hạn trả:</span><span>{checkinTxn.dueDate}</span></div>
+            <div className="detail-row"><span className="text-muted">Mã giao dịch:</span><strong>#{checkoutTxn.id}</strong></div>
+            <div className="detail-row"><span className="text-muted">Người mượn:</span><strong>{checkoutTxn.fullName}</strong></div>
+            <div className="detail-row"><span className="text-muted">Ngày mượn:</span><span>{checkoutTxn.borrowDate}</span></div>
+            <div className="detail-row"><span className="text-muted">Hạn trả:</span><span>{checkoutTxn.dueDate}</span></div>
             <hr className="modal-divider" />
             <div className="detail-row"><span className="text-muted">Ngày trả:</span><strong className="text-success">{new Date().toLocaleDateString('vi-VN')}</strong></div>
-            {checkinDiff > 0 && (
+            {checkoutDiff > 0 && (
               <div className="detail-row">
                 <span className="text-muted">Quá hạn:</span>
-                <strong className="text-danger">{checkinDiff} ngày</strong>
+                <strong className="text-danger">{checkoutDiff} ngày</strong>
               </div>
             )}
           </div>

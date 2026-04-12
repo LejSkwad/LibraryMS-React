@@ -67,7 +67,7 @@ export default function Profile() {
     if (Object.keys(errs).length > 0) return;
     setMsg({ text: '', type: '' });
     try {
-      const res = await apiFetch(`${API_BASE}/v1/users/change-password/${user.id}`, {
+      const res = await apiFetch(`${API_BASE}/v1/users/profile/change-password/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pwForm),

@@ -5,7 +5,7 @@ import Modal from '../components/Modal';
 import { usePagination } from '../hooks/usePagination';
 import { useDebounce } from '../hooks/useDebounce';
 
-const EMPTY_FORM = { email: '', firstName: '', lastName: '', role: '', password: '' };
+const EMPTY_FORM = { email: '', firstName: '', lastName: '', role: '', password: '', phone: '', address: '' };
 
 export default function Users() {
   const { items: users, page, currentPage, setCurrentPage, setPageResult, tableInfo } = usePagination();
@@ -50,6 +50,8 @@ export default function Users() {
       lastName: u.fullName ? u.fullName.split(' ').slice(-1)[0] : '',
       role: u.role || '',
       password: '',
+      phone: u.phone || '',
+      address: u.address || '',
     });
     setModal(true);
   }
@@ -105,7 +107,7 @@ export default function Users() {
           <button className="btn btn-primary" onClick={openAddModal}>+ Thêm User mới</button>
         </div>
       </div>
-
+      
       <div className="txn-filter">
         <div className="txn-filter-top">
           <input className="form-control" value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="Tìm theo tên, SĐT, mã thẻ, email..." />
@@ -198,6 +200,20 @@ export default function Users() {
               <input className="form-control" required placeholder="Nhập tên" value={form.lastName} disabled={isEdit} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
             </div>
           </div>
+          {isEdit && (
+            <>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Số điện thoại</label>
+                  <input className="form-control" placeholder="Nhập số điện thoại" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Địa chỉ</label>
+                  <input className="form-control" placeholder="Nhập địa chỉ" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                </div>
+              </div>
+            </>
+          )}
         </form>
       </Modal>
 

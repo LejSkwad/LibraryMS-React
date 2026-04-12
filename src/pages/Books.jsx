@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { API_BASE, PAGE_SIZE, apiFetch } from '../api/api';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
@@ -29,9 +30,8 @@ function BookCover({ src, alt, fallback }) {
 export default function Books() {
   const { user } = useAuth();
   const isBorrower = user?.role === 'BORROWER';
+  const { selectedBooks, toggleCart } = useCart();
 
-  const [selectedBooks, setSelectedBooks] = useState([]);
-  const [cartModal, setCartModal]   = useState(false);
   const [detailBook, setDetailBook] = useState(null);
 
   const { items: books, page, currentPage, setCurrentPage, setPageResult, tableInfo } = usePagination();
@@ -140,52 +140,16 @@ export default function Books() {
     } catch { alert('Không thể kết nối đến server!'); }
   }
 
-  function toggleCart(book) {
-    setSelectedBooks((prev) =>
-      prev.find((b) => b.id === book.id) ? prev.filter((b) => b.id !== book.id) : [...prev, book]
-    );
-  }
-
-  async function submitBorrowRequest() {
-    if (!selectedBooks.length) return;
-    try {
-      const res  = await apiFetch(`${API_BASE}/v1/borrow-requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, bookIds: selectedBooks.map((b) => b.id) }),
-      });
-      const json = await res.json();
-      alert(json.message);
-      if (res.ok) { setSelectedBooks([]); setCartModal(false); }
-    } catch { alert('Lỗi kết nối!'); }
-  }
-
   return (
     <>
       {/* ── Page header ──────────────────────────────────── */}
-      <div className="page-header">
-        {isBorrower && selectedBooks.length > 0 && (
-          <div className="cart-bar">
-            <div>
-              <div className="cart-bar-info">{selectedBooks.length} sách đã chọn</div>
-              <div className="cart-bar-books">{selectedBooks.map((b) => b.title).join(' · ')}</div>
-            </div>
-            <div style={{ display: 'flex', gap: '.5rem', marginLeft: 'auto' }}>
-              <button className="btn btn-sm btn-outline" style={{ background: 'rgba(255,255,255,.15)', border: '1px solid rgba(255,255,255,.3)', color: '#fff' }} onClick={() => setSelectedBooks([])}>
-                Xóa tất cả
-              </button>
-              <button className="btn btn-sm" style={{ background: '#fff', color: 'var(--primary)', fontWeight: 600 }} onClick={() => setCartModal(true)}>
-                Gửi yêu cầu mượn →
-              </button>
-            </div>
-          </div>
-        )}
-        {!isBorrower && (
+      {!isBorrower && (
+        <div className="page-header">
           <div className="page-actions">
             <button className="btn btn-primary" onClick={openAddModal}>+ Thêm sách</button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Filters ──────────────────────────────────────── */}
       <div className="txn-filter">
@@ -406,31 +370,6 @@ export default function Books() {
         )}
       </Modal>
 
-      {/* ── Cart confirm modal ────────────────────────────── */}
-      <Modal
-        active={cartModal}
-        onClose={() => setCartModal(false)}
-        title="Xác nhận yêu cầu mượn"
-        size="sm"
-        footer={
-          <>
-            <button className="btn btn-outline" onClick={() => setCartModal(false)}>Hủy</button>
-            <button className="btn btn-primary" onClick={submitBorrowRequest}>Gửi yêu cầu</button>
-          </>
-        }
-      >
-        <p style={{ marginBottom: '.75rem' }}>
-          Bạn muốn mượn <strong>{selectedBooks.length}</strong> sách sau:
-        </p>
-        <ul style={{ paddingLeft: '1.25rem', lineHeight: 1.9 }}>
-          {selectedBooks.map((b) => (
-            <li key={b.id}>
-              <span style={{ fontFamily: "'Lora', Georgia, serif", fontStyle: 'italic' }}>{b.title}</span>
-              {' '}<span style={{ color: 'var(--text-muted)', fontSize: '.8125rem' }}>— {b.author}</span>
-            </li>
-          ))}
-        </ul>
-      </Modal>
 
       {/* ── Add / Edit modal ──────────────────────────────── */}
       <Modal
