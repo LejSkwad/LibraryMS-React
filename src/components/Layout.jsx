@@ -68,6 +68,19 @@ export default function Layout() {
       } catch {}
     });
 
+    es.addEventListener('request_taken', (e) => {
+      try {
+        window.dispatchEvent(new CustomEvent('borrow-request-sse', { detail: { type: 'request_taken', data: JSON.parse(e.data) } }));
+      } catch {}
+    });
+
+    es.addEventListener('request_cancelled', (e) => {
+      if (!isBorrower) setPendingCount((c) => Math.max(0, c - 1));
+      try {
+        window.dispatchEvent(new CustomEvent('borrow-request-sse', { detail: { type: 'request_cancelled', data: JSON.parse(e.data) } }));
+      } catch {}
+    });
+
     return () => es.close();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

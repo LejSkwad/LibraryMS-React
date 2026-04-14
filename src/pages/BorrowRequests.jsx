@@ -32,11 +32,13 @@ export default function BorrowRequests() {
   const debouncedLoad = useDebounce((s) => { setCurrentPage(0); loadRequests(0, status, s); });
 
   const [detailModal, setDetailModal]   = useState(false);
+  const [detailItems, setDetailItems]   = useState([]);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [approveModal, setApproveModal] = useState(false);
   const [takeModal, setTakeModal]       = useState(false);
-  const [borrowDate, setBorrowDate]     = useState(today);
   const [dueDate, setDueDate]           = useState(defaultDue);
   const [rejectModal, setRejectModal]   = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [cancelModal, setCancelModal]   = useState(false);
 
   async function loadRequests(pg = currentPage, st = status, s = search) {
@@ -64,14 +66,14 @@ export default function BorrowRequests() {
   useEffect(() => { loadRequests(0); loadStats(); }, []);
 
   const loadRef = useRef(null);
-  loadRef.current = () => loadRequests(0, status, search);
+  loadRef.current = () => { loadRequests(0, status, search); loadStats(); };
 
   useEffect(() => {
     function handler(e) {
       const { type } = e.detail || {};
       const shouldRefresh =
-        (!isBorrower && type === 'new_request') ||
-        (isBorrower && (type === 'request_approved' || type === 'request_rejected'));
+        (!isBorrower && (type === 'new_request' || type === 'request_cancelled')) ||
+        (isBorrower && (type === 'request_approved' || type === 'request_rejected' || type === 'request_taken' || type === 'request_cancelled'));
       if (shouldRefresh) loadRef.current();
     }
     window.addEventListener('borrow-request-sse', handler);
@@ -108,21 +110,26 @@ export default function BorrowRequests() {
     loadRequests(p);
   }
 
-  function openDetail(r) {
+  async function openDetail(r) {
     setSelectedRequest(r);
+    setDetailItems([]);
+    setDetailLoading(true);
     setDetailModal(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${r.id}`);
+      const json = await res.json();
+      setDetailItems(json.data || []);
+    } catch {}
+    setDetailLoading(false);
   }
 
   function openApprove(r) {
     setSelectedRequest(r);
-    setBorrowDate(today);
-    setDueDate(defaultDue);
     setApproveModal(true);
   }
 
   function openTake(r) {
     setSelectedRequest(r);
-    setBorrowDate(today);
     setDueDate(defaultDue);
     setTakeModal(true);
   }
@@ -140,11 +147,10 @@ export default function BorrowRequests() {
   async function handleTake() {
     if (!selectedRequest) return;
     try {
-      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}/take`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ borrowDate: formatDate(borrowDate), dueDate: formatDate(dueDate) }),
-      });
+      const res = await apiFetch(
+        `${API_BASE}/v1/borrow-requests/${selectedRequest.id}/taken?dueDate=${formatDate(dueDate)}`,
+        { method: 'PUT' }
+      );
       const json = await res.json();
       alert(json.message);
       if (res.ok) { setTakeModal(false); loadRequests(0, status); loadStats(); }
@@ -154,10 +160,11 @@ export default function BorrowRequests() {
   async function handleReject() {
     if (!selectedRequest) return;
     try {
-      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}/reject`, { method: 'PUT' });
+      const params = rejectReason.trim() ? `?rejectionReason=${encodeURIComponent(rejectReason.trim())}` : '';
+      const res = await apiFetch(`${API_BASE}/v1/borrow-requests/${selectedRequest.id}/reject${params}`, { method: 'PUT' });
       const json = await res.json();
       alert(json.message);
-      if (res.ok) { setRejectModal(false); loadRequests(0, status); loadStats(); }
+      if (res.ok) { setRejectModal(false); setRejectReason(''); loadRequests(0, status); loadStats(); }
     } catch { alert('Lỗi kết nối!'); }
   }
 
@@ -251,19 +258,6 @@ export default function BorrowRequests() {
                     <td><span className={`badge ${cls}`}>{text}</span></td>
                     <td className="actions">
                       <button className="btn btn-sm btn-outline" onClick={() => openDetail(r)}>Chi tiết</button>
-                      {r.status === 'PENDING' && (
-                        isBorrower ? (
-                          <button className="btn btn-sm btn-danger" onClick={() => { setSelectedRequest(r); setCancelModal(true); }}>Hủy</button>
-                        ) : (
-                          <>
-                            <button className="btn btn-sm btn-success" onClick={() => openApprove(r)}>Duyệt</button>
-                            <button className="btn btn-sm btn-danger" onClick={() => { setSelectedRequest(r); setRejectModal(true); }}>Từ chối</button>
-                          </>
-                        )
-                      )}
-                      {r.status === 'APPROVED' && !isBorrower && (
-                        <button className="btn btn-sm btn-primary" onClick={() => openTake(r)}>Nhận sách</button>
-                      )}
                     </td>
                   </tr>
                 );
@@ -307,30 +301,69 @@ export default function BorrowRequests() {
         }
       >
         {selectedRequest && (
-          <div className="br-detail-info-grid">
-            {!isBorrower && (
-              <>
-                <div className="br-detail-field">
-                  <span className="br-detail-label">Người mượn</span>
-                  <span className="br-detail-value">{selectedRequest.fullName || '-'}</span>
+          <>
+            <div className="br-detail-info-grid">
+              {!isBorrower && (
+                <>
+                  <div className="br-detail-field">
+                    <span className="br-detail-label">Người mượn</span>
+                    <span className="br-detail-value">{selectedRequest.fullName || '-'}</span>
+                  </div>
+                  <div className="br-detail-field">
+                    <span className="br-detail-label">Mã thẻ thư viện</span>
+                    <span className="br-detail-value">{selectedRequest.memberId || '-'}</span>
+                  </div>
+                </>
+              )}
+              <div className="br-detail-field">
+                <span className="br-detail-label">Thời gian yêu cầu</span>
+                <span className="br-detail-value">{selectedRequest.requestDate || '-'}</span>
+              </div>
+              <div className="br-detail-field">
+                <span className="br-detail-label">Trạng thái</span>
+                <span className={`badge ${statusBadge(selectedRequest.status).cls}`}>
+                  {statusBadge(selectedRequest.status).text}
+                </span>
+              </div>
+              {selectedRequest.status === 'REJECTED' && selectedRequest.rejectionReason && (
+                <div className="br-detail-field" style={{ gridColumn: '1 / -1' }}>
+                  <span className="br-detail-label">Lý do từ chối</span>
+                  <span className="br-detail-value" style={{ color: 'var(--danger, #dc2626)' }}>
+                    {selectedRequest.rejectionReason}
+                  </span>
                 </div>
-                <div className="br-detail-field">
-                  <span className="br-detail-label">Mã thẻ thư viện</span>
-                  <span className="br-detail-value">{selectedRequest.memberId || '-'}</span>
-                </div>
-              </>
+              )}
+            </div>
+            <h4 className="detail-books-title" style={{ marginTop: '1.25rem' }}>Sách yêu cầu</h4>
+            {detailLoading ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</p>
+            ) : detailItems.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Không có sách</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                {detailItems.map((b, i) => (
+                  <div key={i} className="br-book-card">
+                    <div className="br-book-cover">
+                      {b.coverImage
+                        ? <img className="br-book-cover-img" src={b.coverImage} alt={b.bookTitle} />
+                        : <div className="br-book-cover-fallback">{(b.bookTitle || '?')[0]}</div>
+                      }
+                    </div>
+                    <div className="br-book-info">
+                      <div className="br-book-title">{b.bookTitle}</div>
+                      <div className="br-book-meta">
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">Tác giả:</span> {b.author || '—'}</span>
+                        <span className="br-book-meta-sep">·</span>
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">NXB:</span> {b.publisher || '—'}</span>
+                        <span className="br-book-meta-sep">·</span>
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">Năm:</span> {b.publishedYear || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-            <div className="br-detail-field">
-              <span className="br-detail-label">Thời gian yêu cầu</span>
-              <span className="br-detail-value">{selectedRequest.requestDate || '-'}</span>
-            </div>
-            <div className="br-detail-field">
-              <span className="br-detail-label">Trạng thái</span>
-              <span className={`badge ${statusBadge(selectedRequest.status).cls}`}>
-                {statusBadge(selectedRequest.status).text}
-              </span>
-            </div>
-          </div>
+          </>
         )}
       </Drawer>
 
@@ -381,13 +414,9 @@ export default function BorrowRequests() {
         )}
         <div className="form-stack">
           <div className="form-group">
-            <label className="form-label">Ngày mượn <span className="required">*</span></label>
-            <input className="form-control" type="date" value={borrowDate} onChange={(e) => setBorrowDate(e.target.value)} />
-          </div>
-          <div className="form-group">
             <label className="form-label">Hạn trả <span className="required">*</span></label>
             <input className="form-control" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            <span className="form-text">Mặc định: 14 ngày kể từ ngày mượn</span>
+            <span className="form-text">Mặc định: 14 ngày kể từ hôm nay</span>
           </div>
         </div>
       </Modal>
@@ -395,12 +424,12 @@ export default function BorrowRequests() {
       {/* Reject Modal */}
       <Modal
         active={rejectModal}
-        onClose={() => setRejectModal(false)}
+        onClose={() => { setRejectModal(false); setRejectReason(''); }}
         title="Từ chối yêu cầu"
         size="xs"
         footer={
           <>
-            <button className="btn btn-outline" onClick={() => setRejectModal(false)}>Hủy</button>
+            <button className="btn btn-outline" onClick={() => { setRejectModal(false); setRejectReason(''); }}>Hủy</button>
             <button className="btn btn-danger" onClick={handleReject}>Xác nhận từ chối</button>
           </>
         }
@@ -413,7 +442,17 @@ export default function BorrowRequests() {
             </div>
           </div>
         )}
-        <p style={{ margin: 0 }}>Bạn có chắc chắn muốn từ chối yêu cầu mượn này không?</p>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Lý do từ chối</label>
+          <textarea
+            className="form-control"
+            rows={3}
+            placeholder="Nhập lý do từ chối (tùy chọn)..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            style={{ resize: 'vertical' }}
+          />
+        </div>
       </Modal>
 
       {/* Cancel Modal */}

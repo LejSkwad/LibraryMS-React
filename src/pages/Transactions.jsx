@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE, PAGE_SIZE, apiFetch, formatDate, getStatusBadge } from '../api/api';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
+import Drawer from '../components/Drawer';
 import { usePagination } from '../hooks/usePagination';
 import { useDebounce } from '../hooks/useDebounce';
 
@@ -296,57 +297,86 @@ export default function Transactions() {
         </div>
       </div>
 
-      {/* Detail Modal */}
-      {detailTxn && (
-        <Modal
-          active={detailModal}
-          onClose={() => setDetailModal(false)}
-          title={`Chi tiết giao dịch #${detailTxn.id}`}
-          size="lg"
-          footer={
-            <>
-              <button className="btn btn-outline" onClick={() => setDetailModal(false)}>Đóng</button>
-              {detailTxn.status !== 'RETURNED' && !isBorrower && (
-                <button className="btn btn-success" onClick={() => { setDetailModal(false); setCheckoutTxn(detailTxn); setCheckoutModal(true); }}>
-                  Trả sách
-                </button>
-              )}
-            </>
-          }
-        >
-          <div className="detail-info">
-            <div className="detail-row"><span className="text-muted">Mã giao dịch:</span><strong>#{detailTxn.id}</strong></div>
-            {!isBorrower && (
-              <>
-                <div className="detail-row"><span className="text-muted">Người mượn:</span><strong>{detailTxn.fullName}</strong></div>
-                <div className="detail-row"><span className="text-muted">Mã thẻ:</span><span>{detailTxn.memberId}</span></div>
-              </>
+      {/* Detail Drawer */}
+      <Drawer
+        active={detailModal}
+        onClose={() => setDetailModal(false)}
+        title={`Chi tiết giao dịch #${detailTxn?.id ?? ''}`}
+        footer={
+          <>
+            <button className="btn btn-outline" onClick={() => setDetailModal(false)}>Đóng</button>
+            {detailTxn?.status !== 'RETURNED' && !isBorrower && (
+              <button className="btn btn-success" onClick={() => { setDetailModal(false); setCheckoutTxn(detailTxn); setCheckoutModal(true); }}>
+                Trả sách
+              </button>
             )}
-            <div className="detail-row"><span className="text-muted">Ngày mượn:</span><span>{detailTxn.borrowDate}</span></div>
-            <div className="detail-row"><span className="text-muted">Hạn trả:</span><span>{detailTxn.dueDate}</span></div>
-            <div className="detail-row"><span className="text-muted">Ngày trả:</span><span>{detailTxn.returnDate || '—'}</span></div>
-            <div className="detail-row">
-              <span className="text-muted">Trạng thái:</span>
-              <span className={`badge ${getStatusBadge(detailTxn).cls}`}>{getStatusBadge(detailTxn).text}</span>
+          </>
+        }
+      >
+        {detailTxn && (
+          <>
+            <div className="br-detail-info-grid">
+              {!isBorrower && (
+                <>
+                  <div className="br-detail-field">
+                    <span className="br-detail-label">Người mượn</span>
+                    <span className="br-detail-value">{detailTxn.fullName || '-'}</span>
+                  </div>
+                  <div className="br-detail-field">
+                    <span className="br-detail-label">Mã thẻ thư viện</span>
+                    <span className="br-detail-value">{detailTxn.memberId || '-'}</span>
+                  </div>
+                </>
+              )}
+              <div className="br-detail-field">
+                <span className="br-detail-label">Ngày mượn</span>
+                <span className="br-detail-value">{detailTxn.borrowDate || '-'}</span>
+              </div>
+              <div className="br-detail-field">
+                <span className="br-detail-label">Hạn trả</span>
+                <span className="br-detail-value">{detailTxn.dueDate || '-'}</span>
+              </div>
+              <div className="br-detail-field">
+                <span className="br-detail-label">Ngày trả</span>
+                <span className="br-detail-value">{detailTxn.returnDate || '—'}</span>
+              </div>
+              <div className="br-detail-field">
+                <span className="br-detail-label">Trạng thái</span>
+                <span className={`badge ${getStatusBadge(detailTxn).cls}`}>{getStatusBadge(detailTxn).text}</span>
+              </div>
             </div>
-          </div>
-          <h4 className="detail-books-title">Sách trong giao dịch</h4>
-          <div className="table-wrapper">
-            <table className="table">
-              <thead><tr><th>Tên sách</th><th>Tác giả</th><th>NXB</th><th>Năm XB</th></tr></thead>
-              <tbody>
-                {detailLoading ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center' }}>Đang tải...</td></tr>
-                ) : detailBooks.length === 0 ? (
-                  <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Không có sách</td></tr>
-                ) : detailBooks.map((b, i) => (
-                  <tr key={i}><td>{b.bookTitle}</td><td>{b.author}</td><td>{b.publisher}</td><td>{b.publishedYear}</td></tr>
+            <h4 className="detail-books-title">Sách trong giao dịch</h4>
+            {detailLoading ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải...</p>
+            ) : detailBooks.length === 0 ? (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Không có sách</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                {detailBooks.map((b, i) => (
+                  <div key={i} className="br-book-card">
+                    <div className="br-book-cover">
+                      {b.coverImage
+                        ? <img className="br-book-cover-img" src={b.coverImage} alt={b.bookTitle} />
+                        : <div className="br-book-cover-fallback">{(b.bookTitle || '?')[0]}</div>
+                      }
+                    </div>
+                    <div className="br-book-info">
+                      <div className="br-book-title">{b.bookTitle}</div>
+                      <div className="br-book-meta">
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">Tác giả:</span> {b.author || '—'}</span>
+                        <span className="br-book-meta-sep">·</span>
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">NXB:</span> {b.publisher || '—'}</span>
+                        <span className="br-book-meta-sep">·</span>
+                        <span className="br-book-meta-item"><span className="br-book-meta-label">Năm:</span> {b.publishedYear || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </Modal>
-      )}
+              </div>
+            )}
+          </>
+        )}
+      </Drawer>
 
       {/* Checkin Modal — lend books to borrower */}
       <Modal
