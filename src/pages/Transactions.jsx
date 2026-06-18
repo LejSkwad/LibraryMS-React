@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE, PAGE_SIZE, apiFetch, formatDate, getStatusBadge } from '../api/api';
+import { API_BASE, PAGE_SIZE, apiFetch, formatDate, getStatusBadge, parseDMY } from '../api/api';
 import Pagination from '../components/Pagination';
 import Modal from '../components/Modal';
 import Drawer from '../components/Drawer';
@@ -190,9 +190,9 @@ export default function Transactions() {
     } catch { alert('Không thể kết nối đến server!'); }
   }
 
-  const today = new Date();
+  const today = new Date(new Date().toDateString());
   const checkoutDiff = checkoutTxn
-    ? Math.ceil((today - new Date(checkoutTxn.dueDate)) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((today - parseDMY(checkoutTxn.dueDate)) / (1000 * 60 * 60 * 24))
     : 0;
 
   return (

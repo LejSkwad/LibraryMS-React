@@ -1,6 +1,13 @@
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 export const PAGE_SIZE = 5;
 
+// Parse "dd/MM/yyyy" (format returned by BE) to Date object
+export function parseDMY(str) {
+  if (!str) return null;
+  const [d, m, y] = str.split('/');
+  return new Date(+y, +m - 1, +d);
+}
+
 export function formatDate(dateStr) {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-');
@@ -25,15 +32,12 @@ export function apiFetch(url, options = {}) {
 }
 
 export function getStatusBadge(t) {
-  const isOverdue =
-    t.status === 'BORROWED' &&
-    new Date(t.dueDate) < new Date(new Date().toDateString());
+  const dueDate = parseDMY(t.dueDate);
+  const today = new Date(new Date().toDateString());
+  const isOverdue = t.status === 'BORROWED' && dueDate < today;
   if (t.status === 'RETURNED') return { cls: 'badge-success', text: 'Đã trả' };
   if (isOverdue) {
-    const days = Math.ceil(
-      (new Date(new Date().toDateString()) - new Date(t.dueDate)) /
-        (1000 * 60 * 60 * 24)
-    );
+    const days = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
     return { cls: 'badge-danger', text: `Quá hạn (${days} ngày)` };
   }
   return { cls: 'badge-warning', text: 'Đang mượn' };
