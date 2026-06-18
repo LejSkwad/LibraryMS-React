@@ -22,14 +22,20 @@ function ProtectedRoute({ staffOnly = false }) {
   return <Layout />;
 }
 
+function PublicRoute({ element }) {
+  const { user } = useAuth();
+  if (user) return <Navigate to={user.role === 'BORROWER' ? '/books' : '/dashboard'} replace />;
+  return element;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/" element={<PublicRoute element={<Login />} />} />
+          <Route path="/register" element={<PublicRoute element={<Register />} />} />
           <Route path="/claim" element={<ClaimAccount />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/books" element={<Books />} />
